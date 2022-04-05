@@ -47,7 +47,6 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.InputStream;
 import org.apache.drill.common.AutoCloseables;
 import java.time.Instant;
