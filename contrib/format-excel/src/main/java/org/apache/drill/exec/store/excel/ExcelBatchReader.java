@@ -24,9 +24,9 @@ import org.apache.drill.common.exceptions.CustomErrorContext;
 import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.types.TypeProtos.DataMode;
 import org.apache.drill.common.types.TypeProtos.MinorType;
-import org.apache.drill.exec.physical.impl.scan.file.FileScanFramework;
-import org.apache.drill.exec.physical.impl.scan.file.FileScanFramework.FileSchemaNegotiator;
-import org.apache.drill.exec.physical.impl.scan.framework.ManagedReader;
+import org.apache.drill.exec.physical.impl.scan.v3.file.FileSchemaNegotiator;
+import org.apache.drill.exec.physical.impl.scan.v3.ManagedReader;
+import org.apache.drill.exec.physical.impl.scan.v3.file.FileDescrip;
 import org.apache.drill.exec.physical.resultSet.ResultSetLoader;
 import org.apache.drill.exec.physical.resultSet.RowSetLoader;
 import org.apache.drill.exec.record.MaterializedField;
@@ -34,9 +34,9 @@ import org.apache.drill.exec.record.metadata.ColumnMetadata;
 import org.apache.drill.exec.record.metadata.MetadataUtils;
 import org.apache.drill.exec.record.metadata.SchemaBuilder;
 import org.apache.drill.exec.record.metadata.TupleMetadata;
+import org.apache.drill.exec.store.dfs.easy.EasySubScan;
 import org.apache.drill.exec.vector.accessor.ScalarWriter;
 import org.apache.drill.exec.vector.accessor.TupleWriter;
-import org.apache.hadoop.mapred.FileSplit;
 import org.apache.poi.ooxml.POIXMLProperties.CoreProperties;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import org.apache.drill.common.AutoCloseables;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -62,7 +63,7 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
+public class ExcelBatchReader implements ManagedReader {
 
   private static final Logger logger = LoggerFactory.getLogger(ExcelBatchReader.class);
 
@@ -142,7 +143,6 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
   private static final int BUFFER_SIZE = 4096;
 
   private final ExcelReaderConfig readerConfig;
-  private final int maxRecords;
   private final TreeSet<String> columnNameChecker;
   private Sheet sheet;
   private Row currentRow;
@@ -157,7 +157,7 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
   private RowSetLoader rowWriter;
   private int totalColumnCount;
   private boolean firstLine;
-  private FileSplit split;
+  private FileDescrip file;
   private int recordCount;
   private Map<String, String> stringMetadata;
   private Map<String, Date> dateMetadata;
@@ -186,20 +186,22 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
     }
   }
 
-  public ExcelBatchReader(ExcelReaderConfig readerConfig, int maxRecords) {
+  public ExcelBatchReader(ExcelReaderConfig readerConfig, EasySubScan scan, FileSchemaNegotiator negotiator) {
+    errorContext = negotiator.parentErrorContext();
     this.readerConfig = readerConfig;
-    this.maxRecords = maxRecords;
     this.columnNameChecker = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     firstLine = true;
-  }
+    file = negotiator.file();
 
-  @Override
-  public boolean open(FileSchemaNegotiator negotiator) {
-    split = negotiator.split();
-    errorContext = negotiator.parentErrorContext();
     ResultSetLoader loader = negotiator.build();
     rowWriter = loader.writer();
-    openFile(negotiator);
+    openFile();
+
+  }
+/*
+  @Override
+  public boolean open(FileSchemaNegotiator negotiator) {
+
 
     if (negotiator.hasProvidedSchema()) {
       TupleMetadata providedSchema = negotiator.providedSchema();
@@ -221,14 +223,14 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
     }
     return true;
   }
+ */
 
   /**
    * This method opens the Excel file, initializes the Streaming Excel Reader, and initializes the sheet variable.
-   * @param negotiator The Drill file negotiator object that represents the file system
    */
-  private void openFile(FileScanFramework.FileSchemaNegotiator negotiator) {
+  private void openFile() {
     try {
-      fsStream = negotiator.fileSystem().openPossiblyCompressedStream(split.getPath());
+      InputStream fsStream = file.fileSystem().openPossiblyCompressedStream(file.split().getPath());
 
       // Open streaming reader
       Workbook workbook = StreamingReader.builder()
@@ -242,7 +244,7 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
     } catch (Exception e) {
       throw UserException
         .dataReadError(e)
-        .message("Failed to open open input file: %s", split.getPath().toString())
+        .message("Failed to open open input file: %s", file.split().getPath().toString())
         .addContext(e.getMessage())
         .addContext(errorContext)
         .build(logger);
@@ -470,6 +472,7 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
   }
 
   private boolean nextLine(RowSetLoader rowWriter) {
+    System.out.println("got into next line");
     if (rowIterator == null) {
       rowIterator = sheet.rowIterator();
     }
@@ -496,8 +499,10 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
     if (readerConfig.lastColumn != 0) {
       finalColumn = readerConfig.lastColumn - 1;
     }
+    if (rowWriter.rowCount() != 0 && rowWriter.rowCount() <= recordCount) {
+      System.out.println("got here");
+      System.out.println("row count" + rowWriter.rowCount());
 
-    if (rowWriter.limitReached(maxRecords)) {
       return false;
     }
 
@@ -747,23 +752,8 @@ public class ExcelBatchReader implements ManagedReader<FileSchemaNegotiator> {
 
   @Override
   public void close() {
-    if (streamingWorkbook != null) {
-      try {
-        streamingWorkbook.close();
-      } catch (IOException e) {
-        logger.warn("Error when closing Excel Workbook resource: {}", e.getMessage());
-      }
-      streamingWorkbook = null;
-    }
-
-    if (fsStream != null) {
-      try {
-        fsStream.close();
-      } catch (IOException e) {
-        logger.warn("Error when closing Excel File Stream resource: {}", e.getMessage());
-      }
-      fsStream = null;
-    }
+    AutoCloseables.closeSilently(streamingWorkbook);
+    AutoCloseables.closeSilently(fsStream);
   }
 
   public static class CellWriter {

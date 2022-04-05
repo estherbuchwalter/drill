@@ -22,11 +22,12 @@ import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.logical.StoragePluginConfig;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.Types;
-import org.apache.drill.exec.physical.impl.scan.file.FileScanFramework.FileReaderFactory;
-import org.apache.drill.exec.physical.impl.scan.file.FileScanFramework.FileScanBuilder;
-import org.apache.drill.exec.physical.impl.scan.file.FileScanFramework.FileSchemaNegotiator;
+import org.apache.drill.exec.physical.impl.scan.v3.file.FileReaderFactory;
+import org.apache.drill.exec.physical.impl.scan.v3.file.FileScanLifecycleBuilder;
+import org.apache.drill.exec.physical.impl.scan.v3.file.FileSchemaNegotiator;
 
-import org.apache.drill.exec.physical.impl.scan.framework.ManagedReader;
+import org.apache.drill.exec.physical.impl.scan.v3.ManagedReader;
+import org.apache.drill.exec.physical.impl.scan.v3.ManagedReader.EarlyEofException;
 import org.apache.drill.exec.server.DrillbitContext;
 import org.apache.drill.exec.server.options.OptionManager;
 import org.apache.drill.exec.store.dfs.easy.EasyFormatPlugin;
@@ -40,20 +41,21 @@ import org.slf4j.LoggerFactory;
 public class ExcelFormatPlugin extends EasyFormatPlugin<ExcelFormatConfig> {
 
   protected static final String DEFAULT_NAME = "excel";
+  public static final String OPERATOR_TYPE = "EXCEL_SUB_SCAN";
   private static final Logger logger = LoggerFactory.getLogger(ExcelFormatPlugin.class);
 
   private static class ExcelReaderFactory extends FileReaderFactory {
     private final ExcelBatchReader.ExcelReaderConfig readerConfig;
-    private final int maxRecords;
+    private final EasySubScan scan;
 
-    public ExcelReaderFactory(ExcelReaderConfig config, int maxRecords) {
-      readerConfig = config;
-      this.maxRecords = maxRecords;
+    public ExcelReaderFactory(ExcelReaderConfig config, EasySubScan scan) {
+      this.readerConfig = config;
+      this.scan = scan;
     }
 
     @Override
-    public ManagedReader<? extends FileSchemaNegotiator> newReader() {
-      return new ExcelBatchReader(readerConfig, maxRecords);
+    public ManagedReader newReader(FileSchemaNegotiator negotiator) throws EarlyEofException {
+      return new ExcelBatchReader(readerConfig, scan, negotiator);
     }
   }
 
@@ -72,29 +74,17 @@ public class ExcelFormatPlugin extends EasyFormatPlugin<ExcelFormatConfig> {
         .supportsProjectPushdown(true)
         .extensions(pluginConfig.getExtensions())
         .fsConf(fsConf)
-        .defaultName(DEFAULT_NAME)
-        .scanVersion(ScanFrameworkVersion.EVF_V1)
+        .readerOperatorType(OPERATOR_TYPE)
+        .defaultName(ExcelFormatPlugin.DEFAULT_NAME)
+        .scanVersion(ScanFrameworkVersion.EVF_V2)
         .supportsLimitPushdown(true)
         .build();
   }
 
   @Override
-  public ManagedReader<? extends FileSchemaNegotiator> newBatchReader(
-    EasySubScan scan, OptionManager options) {
-    return new ExcelBatchReader(formatConfig.getReaderConfig(this), scan.getMaxRecords());
-  }
-
-  @Override
-  protected FileScanBuilder frameworkBuilder(OptionManager options, EasySubScan scan) {
-    FileScanBuilder builder = new FileScanBuilder();
-    ExcelReaderConfig readerConfig = new ExcelReaderConfig(this);
-
-    verifyConfigOptions(readerConfig);
-    builder.setReaderFactory(new ExcelReaderFactory(readerConfig, scan.getMaxRecords()));
-
-    initScanBuilder(builder, scan);
+  protected void configureScan(FileScanLifecycleBuilder builder, EasySubScan scan) {
     builder.nullType(Types.optional(TypeProtos.MinorType.VARCHAR));
-    return builder;
+    builder.readerFactory(new ExcelReaderFactory(formatConfig.getReaderConfig(this), scan));
   }
 
   /**
