@@ -498,12 +498,6 @@ public class ExcelBatchReader implements ManagedReader {
     if (readerConfig.lastColumn != 0) {
       finalColumn = readerConfig.lastColumn - 1;
     }
-    if (rowWriter.rowCount() != 0 && rowWriter.rowCount() <= recordCount) {
-      System.out.println("got here");
-      System.out.println("row count" + rowWriter.rowCount());
-
-      return false;
-    }
 
     rowWriter.start();
     for (int colWriterIndex = 0; colPosition < finalColumn; colWriterIndex++) {
