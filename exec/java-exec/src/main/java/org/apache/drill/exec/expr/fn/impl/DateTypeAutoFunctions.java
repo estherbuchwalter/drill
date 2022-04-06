@@ -16,8 +16,8 @@ import java.util.Date;
 
 public class DateTypeAutoFunctions {
   @SuppressWarnings("unused")
-  @FunctionTemplate(names = { "date_add",
-    "add" }, scope = FunctionTemplate.FunctionScope.SIMPLE, nulls = NullHandling.NULL_IF_NULL)
+  @FunctionTemplate(names = { "date_add_auto",
+    "add_auto" }, scope = FunctionTemplate.FunctionScope.SIMPLE, nulls = NullHandling.NULL_IF_NULL)
   public static class DateTimeAddAutoFunction implements DrillSimpleFunc {
     @Param
     VarCharHolder left;
