@@ -275,6 +275,11 @@ public class ExcelBatchReader implements ManagedReader {
 
     columnWriters = new ArrayList<>();
     metadataColumnWriters = new ArrayList<>();
+    /*
+    ScalarWriter scalarWriter = rowWriter.scalar(index);
+    metadataColumnWriters.add(scalarWriter);
+
+     */
     cellWriterArray = new ArrayList<>();
 
     // Get the number of columns.
@@ -653,6 +658,7 @@ public class ExcelBatchReader implements ManagedReader {
   }
 
   private void addColumnToArray(TupleWriter rowWriter, String name, MinorType type, boolean isMetadata) {
+    metadataColumnWriters = new ArrayList<>();
     int index = rowWriter.tupleSchema().index(name);
     if (index == -1) {
       ColumnMetadata colSchema = MetadataUtils.newScalar(name, type, DataMode.OPTIONAL);
@@ -665,7 +671,9 @@ public class ExcelBatchReader implements ManagedReader {
     }
 
     if (isMetadata) {
+      //metadataColumnWriters.add(rowWriter.scalar(index))
       metadataColumnWriters.add(rowWriter.scalar(index));
+
     } else {
       columnWriters.add(rowWriter.scalar(index));
       if (readerConfig.allTextMode && type == MinorType.FLOAT8) {
