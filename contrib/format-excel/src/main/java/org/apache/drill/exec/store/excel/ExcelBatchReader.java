@@ -222,7 +222,6 @@ public class ExcelBatchReader implements ManagedReader {
     }
     return true;
   }
- */
 
   /**
    * This method opens the Excel file, initializes the Streaming Excel Reader, and initializes the sheet variable.
@@ -275,11 +274,7 @@ public class ExcelBatchReader implements ManagedReader {
 
     columnWriters = new ArrayList<>();
     metadataColumnWriters = new ArrayList<>();
-    /*
-    ScalarWriter scalarWriter = rowWriter.scalar(index);
-    metadataColumnWriters.add(scalarWriter);
 
-     */
     cellWriterArray = new ArrayList<>();
 
     // Get the number of columns.
@@ -658,7 +653,6 @@ public class ExcelBatchReader implements ManagedReader {
   }
 
   private void addColumnToArray(TupleWriter rowWriter, String name, MinorType type, boolean isMetadata) {
-    metadataColumnWriters = new ArrayList<>();
     int index = rowWriter.tupleSchema().index(name);
     if (index == -1) {
       ColumnMetadata colSchema = MetadataUtils.newScalar(name, type, DataMode.OPTIONAL);
@@ -671,7 +665,6 @@ public class ExcelBatchReader implements ManagedReader {
     }
 
     if (isMetadata) {
-      //metadataColumnWriters.add(rowWriter.scalar(index))
       metadataColumnWriters.add(rowWriter.scalar(index));
 
     } else {
@@ -706,7 +699,7 @@ public class ExcelBatchReader implements ManagedReader {
       String value = stringMetadata.get(column.getFieldName());
       int index = column.ordinal();
       if (value == null) {
-        metadataColumnWriters.get(index).setNull();
+        metadataColumnWriters.get(index-2).setNull();
       } else {
         metadataColumnWriters.get(index).setString(value);
       }
