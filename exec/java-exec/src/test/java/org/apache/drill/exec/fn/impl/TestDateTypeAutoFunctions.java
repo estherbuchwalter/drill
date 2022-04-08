@@ -22,7 +22,7 @@ public class TestDateTypeAutoFunctions extends ClusterTest {
 
   @Test
   public void testDateAddAuto() throws RpcException {
-    String sql = "select date_add_auto('2015-01-24', '3') as col1 " +
+    String sql = "select date_add_auto('2015/01/24', '3') as col1 " +
       "from (values(1))";
 
     QueryBuilder q = client.queryBuilder().sql(sql);

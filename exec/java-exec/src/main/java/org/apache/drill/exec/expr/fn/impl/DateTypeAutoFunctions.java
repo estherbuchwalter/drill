@@ -12,6 +12,10 @@ import org.apache.drill.exec.expr.holders.TimeStampHolder;
 import org.apache.drill.exec.expr.holders.VarCharHolder;
 
 import java.text.ParseException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.Date;
 
 public class DateTypeAutoFunctions {
@@ -33,26 +37,38 @@ public class DateTypeAutoFunctions {
     @Override
     public void eval() {
       String defaultDateFormat = "yyyy/mm/dd";
-      FastDateFormat defaultDateFormatter = org.apache.commons.lang3.time.FastDateFormat.getInstance(defaultDateFormat);
+      FastDateFormat defaultDateFormatter = org.apache.commons.lang3.time.FastDateFormat.getDateInstance(FastDateFormat.LONG);
       String leftStr = org.apache.drill.exec.expr.fn.impl.StringFunctionHelpers.getStringFromVarCharHolder(left);
       String rightStr = org.apache.drill.exec.expr.fn.impl.StringFunctionHelpers.getStringFromVarCharHolder(right);
 
       if (org.apache.drill.exec.expr.fn.impl.StringFunctionHelpers.isReadableAsDate(left.buffer,
         left.start, left.end)) {
         try {
-          Date inputDate = defaultDateFormatter.parse(leftStr);
+          DateTimeFormatter myFormatter = DateTimeFormatter.ofPattern(defaultDateFormat);
+          LocalDate date = LocalDate.parse(leftStr, myFormatter);
+          System.out.println("date: " + date);
+
+/*
+          Date inputDate = new Date(leftStr);
+          String formattedDate = defaultDateFormatter.format(inputDate);
+          System.out.println("parsed date: " + formattedDate);
+
+ */
           int inputInt = Integer.parseInt(rightStr);
           DateHolder myDateHolder = new DateHolder();
-          myDateHolder.value = inputDate.getTime();
+          //myDateHolder.value = inputDate.getTime();
+          myDateHolder.value = date.getLong(ChronoField.DAY_OF_MONTH);
           System.out.println("dateholder: " + myDateHolder.value);
           TimeHolder myTimeHolder = new TimeHolder();
           myTimeHolder.value = inputInt;
           System.out.println("timeholder: " + myTimeHolder.value);
           out.value = myDateHolder.value + myTimeHolder.value;
           System.out.println("out: " + out.value);
-        } catch(ParseException e) {
-          System.out.println("unable to parse-parse");
-        } catch(NumberFormatException e) {
+        }
+        catch (DateTimeParseException exc) {
+          System.out.printf("%s is not parsable!%n", leftStr);
+          throw exc;      // Rethrow the exception.
+        }catch(NumberFormatException e) {
           System.out.println("nfe");
         }
       }
